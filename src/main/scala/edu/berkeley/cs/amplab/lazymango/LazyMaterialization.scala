@@ -44,7 +44,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	// TODO: if file/files provided does not have have all the chromosomes, how do we fetch files?
 	// file path of file we're lazily materializing. Currently it's only one file
 	val fp: String = filePath
-	// TODO: This correct types for alignment record?
+	// K = interval, S = sec key (person id), V = data (alignment record)
 	var intRDD: IntervalRDD[Interval[Long], String, AlignmentRecord] = null
 
 
@@ -54,6 +54,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	* Gets the data for an interval for the file loaded by checking in the bookkeeping tree.
 	* If it exists, call get on the IntervalRDD
 	* Otherwise call put on the sections of data that don't exist
+	* Here, ks, is an option of list of personids (String)
 	*/
   	def multiget(chr: String, intl: Interval[Long], ks: Option[List[String]]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
   		// Initialize the RDD to the first get request
@@ -72,6 +73,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
   			// ks is an Option, so get it
   			val searchResults: List[(String, Boolean)] = bookkeep.search(intl, ks.get)
   			// Put in data that we don't have
+  			// Loops through each chromosome, putting it in if doesn't exist
   			searchResults.foreach(elem => {
   				val elemChr = elem._1
   				val elemBool = elem._2
@@ -93,6 +95,8 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
   	*/
     private def put(chr: String, intl: Interval[Long], ks: Option[List[String]]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
     	// Fetching the specific data that we want from disk
+    	// TODO: Add logic to fetch from different chromosomes, this would mean fetching from a different file entirely typically
+    		// Currently, specifying chr doesn't do anything, everything depends on the file you pulled specified at first
         val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
         val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
         val loading = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
@@ -113,7 +117,7 @@ object LazyMaterialization {
   	var sc = new SparkContext("local", "test", conf)
 
   	//Create a Lazy Materialization object by feeding in a file path to build an RDD from
-	def apply(fp: String): LazyMaterialization = {
-		new LazyMaterialization(fp, sc)
+	def apply(filePath: String): LazyMaterialization = {
+		new LazyMaterialization(filePath, sc)
 	}
 }

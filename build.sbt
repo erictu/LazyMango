@@ -14,6 +14,13 @@ licenses += "Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.html
 
 libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.5" % "test"
 
+libraryDependencies += "org.bdgenomics.adam" %% "adam-core" % "0.17.1"
+libraryDependencies += "org.bdgenomics.adam" %% "adam-cli" % "0.17.1"
+libraryDependencies += "org.bdgenomics.adam" %% "adam-core" % "0.17.1" % "test"
+
+//libraryDependencies += "org.apache.parquet" %% "parquet-avro" % "1.8.1"
+libraryDependencies += "org.apache.parquet" %% "parquet-scala" % "1.8.1"
+
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.2" % "test"
 
 javaOptions in test += "-Xmx2G"

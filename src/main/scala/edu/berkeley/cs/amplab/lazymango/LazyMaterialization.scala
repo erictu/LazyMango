@@ -45,7 +45,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	// file path of file we're lazily materializing. Currently it's only one file
 	val fp: String = filePath
 	// K = interval, S = sec key (person id), V = data (alignment record)
-	var intRDD: IntervalRDD[Interval[Long], String, AlignmentRecord] = null
+	var intRDD: IntervalRDD[String, Interval[Long], String, AlignmentRecord] = null
 
 
 
@@ -62,7 +62,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	        val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
 	        val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
 	        val loading = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
-	  		val ready: RDD[(Interval[Long], (String, AlignmentRecord))] = loading.map(rec => (new Interval(rec.start, rec.end), ("person1", rec)))
+	  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => (("person1",new Interval(rec.start, rec.end)), ("person1", rec)))
 	  		intRDD = IntervalRDD(ready)
 
 	  		// Add our initial entry into our tree, then call get again, now with the data loaded
@@ -100,12 +100,13 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
         val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
         val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
         val loading = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
-  		val ready: RDD[(Interval[Long], (String, AlignmentRecord))] = loading.map(rec => (new Interval(rec.start, rec.end), ("person1", rec)))
-    	intRDD.multiput(chr, intl, ready)
+  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+    	intRDD.multiput(ready)
 
     	// Add an entry into our interval tree
     	bookkeep.insert(intl, (chr, true))
   		multiget(chr, intl, ks)
+      null
   	}
 
 }

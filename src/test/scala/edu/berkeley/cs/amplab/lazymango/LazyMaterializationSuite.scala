@@ -42,8 +42,9 @@ import org.scalatest.Matchers
 class LazyMaterializationSuite extends ADAMFunSuite  {
 
 	sparkTest("get data from lazy materialization structure") {
-	    var lazyMat = LazyMaterialization("./mouse_chrM.adam", sc)
-	    lazyMat.multiget("chrM", new Interval(0L, 100L), null)
+	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
+	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 100L), "person1")
+	    println(results.get)
 	}
 
 }

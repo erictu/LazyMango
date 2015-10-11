@@ -59,9 +59,11 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
   	def multiget(chr: String, intl: Interval[Long], ks: Option[List[String]]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
   		// Initialize the RDD to the first get request
   		if (intRDD == null) {
+          println("INITIALIZINGRDD")
 	        val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
 	        val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-	        val loading = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
+	        // val loading = sc.loadAlignments(fp, predicate = Some(pred), projection = Some(proj))
+          val loading = sc.loadParquetAlignments(fp)
 	  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => (("person1",new Interval(rec.start, rec.end)), ("person1", rec)))
 	  		intRDD = IntervalRDD(ready)
 
@@ -70,9 +72,18 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	  		multiget(chr, intl, ks)
   		}
   		else {
+        println("ELSE:")
+        bookkeep.printNodes()
   			// ks is an Option, so get it
-  			val searchResults: List[(String, Boolean)] = bookkeep.search(intl, ks.get)
-  			// Put in data that we don't have
+        var searchResults: List[(String, Boolean)] = null
+        ks match {
+          case Some(_) => searchResults = bookkeep.search(intl, ks.get)
+          case null => searchResults = bookkeep.search(intl)
+        }
+  			// val searchResults: List[(String, Boolean)] = bookkeep.search(intl, ks.get)
+  			// val searchResults: List[(String, Boolean)] = bookkeep.search(intl)
+
+        // Put in data that we don't have
   			// Loops through each chromosome, putting it in if doesn't exist
   			searchResults.foreach(elem => {
   				val elemChr = elem._1
@@ -99,7 +110,8 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
     		// Currently, specifying chr doesn't do anything, everything depends on the file you pulled specified at first
         val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
         val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-        val loading = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
+        // val loading = sc.loadAlignments(fp, predicate = Some(pred), projection = Some(proj))
+        val loading = sc.loadParquetAlignments(fp)
   		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
     	intRDD.multiput(ready)
 
@@ -114,11 +126,12 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 //Takes in a file path, contains adapters to pull in RDD[BDGFormat]
 object LazyMaterialization {
 
-  	var conf = new SparkConf(false)
-  	var sc = new SparkContext("local", "test", conf)
+  	// var conf = new SparkConf(false)
+   //  conf.set("spark.kryo.classesToRegister", "org.bdgenomics.formats.avro.AlignmentRecord")
+  	// var sc = new SparkContext("local", "test", conf)
 
   	//Create a Lazy Materialization object by feeding in a file path to build an RDD from
-	def apply(filePath: String): LazyMaterialization = {
+	def apply(filePath: String, sc: SparkContext): LazyMaterialization = {
 		new LazyMaterialization(filePath, sc)
 	}
 }

@@ -43,20 +43,69 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 
 	sparkTest("get data from lazy materialization structure") {
 	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
-	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 700L), "person1")
+	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 1050L), "person1")
+	}
+
+	sparkTest("configurable chunk size") {
+		val newChunkSize = 3000
+		val intl = new Interval[Long](0L, 700L)
+
+	 	var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
+	    val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")	
+	
+ 		var defaultLazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
+	    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = defaultLazyMat.get("chrM", intl, "person1")
+
+		assert(results1.get.head._2.size == results2.get.head._2.size)
+
 	}
 
 	sparkTest("reget data from lazy materialization structure") {
 	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
-	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 700L), "person1")
 
-		val results2 = lazyMat.get("chrM", new Interval(600L, 800L), "person1")
+	    val intl1: Interval[Long] = new Interval[Long](10L, 150L)
+	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl1, "person1")
+	    val intervals: (Interval[Long], List[(String, AlignmentRecord)])  = results.get.head
 
+	    intervals._2.foreach(k => assert(intl1.overlaps(new Interval(k._2.start, k._2.end))))
+
+	    val intl2: Interval[Long] = new Interval[Long](600L, 800L)
+		val results2: Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl2, "person1")
+	    // for each element in results2, check that they are between intl2
+	    val intervals2: (Interval[Long], List[(String, AlignmentRecord)])  = results2.get.head
+
+	    intervals2._2.foreach(k => {
+	    	val testIntl = new Interval[Long](k._2.start, k._2.end)
+	    	val overlaps = intl2.overlaps(new Interval(k._2.start, k._2.end))
+	    	if (!overlaps) {
+	    		println(testIntl)
+	    		println("overlap was not in range")
+	    	}
+	    })
+
+	    //intervals2._2.foreach(k => assert(intl2.overlaps(new Interval(k._2.start, k._2.end))))
 	}
 
+	sparkTest("look up intervals larger than chunk size") {
 
-	test("look up intervals larger than chunk size") {
-		assert(0 == 1)
+	 	val intl = new Interval[Long](0L, 1500L)
+	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
+	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
+
+	    val intervals: List[(String, AlignmentRecord)]  = results.get.head._2
+
+	    intervals.foreach(k => assert(intl.overlaps(new Interval(k._2.start, k._2.end))))
+
+	 	val intl1 = new Interval[Long](0L, 999L)
+	 	val intl2 = new Interval[Long](1000L, 1500L)
+	 	val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl1, "person1")
+	    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl2, "person1")
+
+		val combResults: List[(String, AlignmentRecord)] = results1.get.head._2 ::: results2.get.head._2
+
+		val filteredResults: List[(String, AlignmentRecord)] = combResults.distinct
+
+		assert(intervals.distinct.size ==filteredResults.distinct.size)
 
 	}
 

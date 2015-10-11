@@ -17,6 +17,8 @@
 
 package edu.berkeley.cs.amplab.lazymango
 
+import java.io.File
+
 import com.github.akmorrow13.intervaltree._
 import edu.berkeley.cs.amplab.spark.intervalrdd._
 import scala.reflect.ClassTag
@@ -32,6 +34,8 @@ import org.apache.spark.storage.StorageLevel
 import org.bdgenomics.adam.projections.{ Projection, VariantField, AlignmentRecordField, GenotypeField, NucleotideContigFragmentField, FeatureField }
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
+
+import org.bdgenomics.adam.models.ReferenceRegion
 
 import scala.collection.mutable.ListBuffer
 import collection.mutable.HashMap
@@ -65,6 +69,34 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
     }
   }
 
+  def loadadam(chr: String, intl: Interval[Long]): RDD[((String, Interval[Long]), (String, AlignmentRecord))] = {
+    val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
+    val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
+    val data = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
+    data.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+  }
+
+  def loadbam(chr: String, intl: Interval[Long]): RDD[((String, Interval[Long]), (String, AlignmentRecord))]  = {
+    var viewRegion = ReferenceRegion(chr, intl.start, intl.end)
+    val idxFile: File = new File(fp + ".bai")
+    if (!idxFile.exists()) {
+      val data: RDD[AlignmentRecord] = sc.loadBam(fp).filterByOverlappingRegion(viewRegion)
+      data.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+    } else {
+      val data: RDD[AlignmentRecord] = sc.loadIndexedBam(fp, viewRegion)
+      data.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+    }
+  }
+
+  def loadFromFile(chr: String, intl: Interval[Long]): RDD[((String, Interval[Long]), (String, AlignmentRecord))]  = {
+    if (fp.endsWith(".adam")) {
+      loadadam(chr, intl)
+    } else if (fp.endsWith(".sam") || fp.endsWith(".bam")) {
+      loadbam(chr, intl)
+    } else {
+      throw UnsupportedFileException("File type not supported")
+    }
+  }
 
 
   def get(chr: String, i: Interval[Long], k: String): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = multiget(chr, i, List(k))
@@ -76,28 +108,27 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	* Here, ks, is an option of list of personids (String)
 	*/
 	def multiget(chr: String, i: Interval[Long], ks: List[String]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
-    
-    // materialize intl by block size
+
     val intl: Interval[Long] = getChunk(i)
+    println(intl)
 
 		if (intRDD == null) {
-      val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
-      val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-      val loading = sc.loadAlignments(fp)
-  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+      println("intRDD null")
+      val ready = loadFromFile(chr, intl)
+      println(ready)
   		intRDD = IntervalRDD(ready)
   		// Add our initial entry into our tree, then call get again, now with the data loaded
       rememberValues(chr, intl, ks)
       intRDD.multiget(chr, i, Option(ks))
 		} 
     else {
-			// ks is an Option, so get it
       val intls = partitionChunk(intl)
-
+      println(intls)
       for (i <- intls) {
         val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
         // for all keys not in found, add to list
         val notFound: List[String] = ks.filterNot(found.contains(_))
+        println(notFound)
         put(chr, i, notFound)
       }
       intRDD.multiget(chr, intl, Option(ks))
@@ -109,15 +140,13 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	* Then puts fetched data in the IntervalRDD, and calls multiget again, now with the data existing
 	*/
   private def put(chr: String, intl: Interval[Long], ks: List[String]) = {
-  	// Fetching the specific data that we want from disk
-  	// TODO: Add logic to fetch from different chromosomes, this would mean fetching from a different file entirely typically
-  		// Currently, specifying chr doesn't do anything, everything depends on the file you pulled specified at first
+
     val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
     val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-    val loading = sc.loadAlignments(fp)
+    val loading: RDD[AlignmentRecord] = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
 		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
-  	intRDD.multiput(ready)
-
+    
+    intRDD.multiput(ready)
   	rememberValues(chr, intl, ks)
 	}
 
@@ -144,6 +173,9 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
   }
 
 }
+
+case class UnsupportedFileException(message: String) extends Exception(message)
+
 
 //Takes in a file path, contains adapters to pull in RDD[BDGFormat]
 object LazyMaterialization {

@@ -31,24 +31,19 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.bdgenomics.adam.projections.{ Projection, VariantField, AlignmentRecordField, GenotypeField, NucleotideContigFragmentField, FeatureField }
 import org.bdgenomics.adam.rdd.ADAMContext._
+import org.bdgenomics.adam.util.ADAMFunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
 
 import scala.collection.mutable.ListBuffer
-
+import scala.io.Source
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+class LazyMaterializationSuite extends ADAMFunSuite  {
 
-class IntervalPartitionSuite extends FunSuite  {
-
-
-	test("create lazy materialization structure") {
-
+	sparkTest("get data from lazy materialization structure") {
+	    var lazyMat = LazyMaterialization("./mouse_chrM.adam", sc)
+	    lazyMat.multiget("chrM", new Interval(0L, 100L), null)
 	}
-
-	test("get data from lazy materialization structure") {
-
-	}
-
 
 }

@@ -42,10 +42,11 @@ import collection.mutable.HashMap
 
 
 //TODO: Have it do things other than AlignmentRecord, currently just trying it out
-class LazyMaterialization(filePath: String, sc: SparkContext) {
+class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
 
-  // TODO: make this value configurable
-  val chunkSize = 1000
+  def this(filePath: String, sc: SparkContext) = {
+    this(filePath, sc, 1000)
+  }
 
   // TODO: could merge into 1 interval tree with nodes storing (chr, list(keys)). Storing the booleans is a waste of space
   var bookkeep: HashMap[String, IntervalTree[String, Boolean]] = new HashMap() 
@@ -110,28 +111,22 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	def multiget(chr: String, i: Interval[Long], ks: List[String]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
 
     val intl: Interval[Long] = getChunk(i)
-    println(intl)
 
 		if (intRDD == null) {
-      println("intRDD null")
       val ready = loadFromFile(chr, intl)
-      println(ready)
   		intRDD = IntervalRDD(ready)
-  		// Add our initial entry into our tree, then call get again, now with the data loaded
       rememberValues(chr, intl, ks)
       intRDD.multiget(chr, i, Option(ks))
 		} 
     else {
       val intls = partitionChunk(intl)
-      println(intls)
       for (i <- intls) {
         val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
         // for all keys not in found, add to list
         val notFound: List[String] = ks.filterNot(found.contains(_))
-        println(notFound)
         put(chr, i, notFound)
       }
-      intRDD.multiget(chr, intl, Option(ks))
+      intRDD.multiget(chr, i, Option(ks))
 		}
 	}
 
@@ -184,4 +179,7 @@ object LazyMaterialization {
 	def apply(filePath: String, sc: SparkContext): LazyMaterialization = {
 		new LazyMaterialization(filePath, sc)
 	}
+  def apply(filePath: String, sc: SparkContext, chunkSize: Long): LazyMaterialization = {
+    new LazyMaterialization(filePath, sc, chunkSize)
+  }
 }

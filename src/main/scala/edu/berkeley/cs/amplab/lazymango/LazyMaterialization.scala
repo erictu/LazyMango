@@ -34,12 +34,17 @@ import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
 
 import scala.collection.mutable.ListBuffer
+import collection.mutable.HashMap
 
 
 //TODO: Have it do things other than AlignmentRecord, currently just trying it out
 class LazyMaterialization(filePath: String, sc: SparkContext) {
-	// chromosome, whether the interval for that chromosome exists
-	val bookkeep: IntervalTree[String, Boolean] = new IntervalTree[String, Boolean]()
+
+  // TODO: make this value configurable
+  val chunkSize = 1000
+
+  // TODO: could merge into 1 interval tree with nodes storing (chr, list(keys)). Storing the booleans is a waste of space
+  var bookkeep: HashMap[String, IntervalTree[String, Boolean]] = new HashMap() 
 
 	// TODO: if file/files provided does not have have all the chromosomes, how do we fetch files?
 	// file path of file we're lazily materializing. Currently it's only one file
@@ -48,7 +53,20 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	var intRDD: IntervalRDD[String, Interval[Long], String, AlignmentRecord] = null
 
 
+  private def rememberValues(chr: String, intl: Interval[Long], ks: List[String]) = {
+    // find chr in bookkeep
+    if (bookkeep.contains(chr)) {
+      bookkeep(chr).insert(intl, ks.map( k => (k, true)))
+    } else {
+      val newTree = new IntervalTree[String, Boolean]()
+      newTree.insert(intl, ks.map( k => (k, true)))
+      bookkeep += ((chr, newTree))
+    }
+  }
 
+
+
+  def get(chr: String, i: Interval[Long], k: String): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = multiget(chr, i, List(k))
 
 	/* If the RDD has not been initialized, initialize it to the first get request
 	* Gets the data for an interval for the file loaded by checking in the bookkeeping tree.
@@ -56,81 +74,80 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
 	* Otherwise call put on the sections of data that don't exist
 	* Here, ks, is an option of list of personids (String)
 	*/
-  	def multiget(chr: String, intl: Interval[Long], ks: Option[List[String]]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
-  		// Initialize the RDD to the first get request
-  		if (intRDD == null) {
-          println("INITIALIZINGRDD")
-	        val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
-	        val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-	        // val loading = sc.loadAlignments(fp, predicate = Some(pred), projection = Some(proj))
-          val loading = sc.loadParquetAlignments(fp)
-	  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => (("person1",new Interval(rec.start, rec.end)), ("person1", rec)))
-	  		intRDD = IntervalRDD(ready)
+	def multiget(chr: String, i: Interval[Long], ks: List[String]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
+    
+    // materialize intl by block size
+    val intl: Interval[Long] = getChunk(i)
 
-	  		// Add our initial entry into our tree, then call get again, now with the data loaded
-	  		bookkeep.insert(intl, (chr, true))
-	  		multiget(chr, intl, ks)
-  		}
-  		else {
-        println("ELSE:")
-        bookkeep.printNodes()
-  			// ks is an Option, so get it
-        var searchResults: List[(String, Boolean)] = null
-        ks match {
-          case Some(_) => searchResults = bookkeep.search(intl, ks.get)
-          case null => searchResults = bookkeep.search(intl)
-        }
-  			// val searchResults: List[(String, Boolean)] = bookkeep.search(intl, ks.get)
-  			// val searchResults: List[(String, Boolean)] = bookkeep.search(intl)
+		if (intRDD == null) {
+      val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
+      val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
+      val loading = sc.loadAlignments(fp)
+  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => (("chr1",new Interval(rec.start, rec.end)), ("person1", rec)))
+  		intRDD = IntervalRDD(ready)
+  		// Add our initial entry into our tree, then call get again, now with the data loaded
+      rememberValues(chr, intl, ks)
+      intRDD.multiget(chr, i, Option(ks))
+		} 
+    else {
+			// ks is an Option, so get it
+      val intls = partitionChunk(intl)
 
-        // Put in data that we don't have
-  			// Loops through each chromosome, putting it in if doesn't exist
-  			searchResults.foreach(elem => {
-  				val elemChr = elem._1
-  				val elemBool = elem._2
-  				if (elemBool != true) {
-  					// TODO: putting in correct thing? what are the keys?
-  					put(chr, intl, ks)
-  				}
-  			})
+      for (i <- intls) {
+        val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
+        // for all keys not in found, add to list
+        val notFound: List[String] = ks.filterNot(found.contains(_))
+        put(chr, i, notFound)
+      }
+      intRDD.multiget(chr, intl, Option(ks))
+		}
+	}
 
-  			// Then fetch that data once we've filled in the gaps
-  			intRDD.multiget(chr, intl, ks)
-  		}
+	/* Transparent to the user, should only be called by get if IntervalRDD.get does not return data
+	* Fetches the data from disk, using predicates and range filtering
+	* Then puts fetched data in the IntervalRDD, and calls multiget again, now with the data existing
+	*/
+  private def put(chr: String, intl: Interval[Long], ks: List[String]) = {
+  	// Fetching the specific data that we want from disk
+  	// TODO: Add logic to fetch from different chromosomes, this would mean fetching from a different file entirely typically
+  		// Currently, specifying chr doesn't do anything, everything depends on the file you pulled specified at first
+    val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
+    val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
+    val loading = sc.loadAlignments(fp)
+		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
+  	intRDD.multiput(ready)
 
-  	}
+  	rememberValues(chr, intl, ks)
+	}
 
-  	/* Transparent to the user, should only be called by get if IntervalRDD.get does not return data
-  	* Fetches the data from disk, using predicates and range filtering
-  	* Then puts fetched data in the IntervalRDD, and calls multiget again, now with the data existing
-  	*/
-    private def put(chr: String, intl: Interval[Long], ks: Option[List[String]]): Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = {
-    	// Fetching the specific data that we want from disk
-    	// TODO: Add logic to fetch from different chromosomes, this would mean fetching from a different file entirely typically
-    		// Currently, specifying chr doesn't do anything, everything depends on the file you pulled specified at first
-        val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
-        val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-        // val loading = sc.loadAlignments(fp, predicate = Some(pred), projection = Some(proj))
-        val loading = sc.loadParquetAlignments(fp)
-  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
-    	intRDD.multiput(ready)
+  // get block chunk of request
+  private def getChunk(intl: Interval[Long]): Interval[Long] =  {
+    val start = intl.start / chunkSize * chunkSize
+    val end = intl.end / chunkSize * chunkSize + (chunkSize - 1)
+    val interval: Interval[Long] = new Interval(start, end)
+    interval
+  }
 
-    	// Add an entry into our interval tree
-    	bookkeep.insert(intl, (chr, true))
-  		multiget(chr, intl, ks)
-      null
-  	}
+  // get block chunk of request
+  private def partitionChunk(intl: Interval[Long]): List[Interval[Long]] =  {
+  var intls: ListBuffer[Interval[Long]] = new ListBuffer[Interval[Long]]()
+    var start = intl.start / chunkSize * chunkSize
+    var end = start + (chunkSize - 1)
+
+    while(start <= intl.end) {
+      intls += new Interval(start, end)
+      start += chunkSize
+      end += chunkSize
+    }
+    intls.toList
+  }
 
 }
 
 //Takes in a file path, contains adapters to pull in RDD[BDGFormat]
 object LazyMaterialization {
 
-  	// var conf = new SparkConf(false)
-   //  conf.set("spark.kryo.classesToRegister", "org.bdgenomics.formats.avro.AlignmentRecord")
-  	// var sc = new SparkContext("local", "test", conf)
-
-  	//Create a Lazy Materialization object by feeding in a file path to build an RDD from
+  //Create a Lazy Materialization object by feeding in a file path to build an RDD from
 	def apply(filePath: String, sc: SparkContext): LazyMaterialization = {
 		new LazyMaterialization(filePath, sc)
 	}

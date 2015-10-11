@@ -35,18 +35,15 @@ import org.bdgenomics.adam.util.ADAMFunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
 
 import scala.collection.mutable.ListBuffer
+import scala.io.Source
+import org.scalatest.FunSuite
+import org.scalatest.Matchers
 
 class LazyMaterializationSuite extends ADAMFunSuite  {
 
-
-	// test("create lazy materialization structure") {
- //    var lazyMat = LazyMaterialization("./mouse_chrM.adam")
-	// }
-
 	sparkTest("get data from lazy materialization structure") {
-    var lazyMat = LazyMaterialization("./mouse_chrM.adam", sc)
-    lazyMat.multiget("chrM", new Interval(0L, 100L), null)
+	    var lazyMat = LazyMaterialization("./mouse_chrM.adam", sc)
+	    lazyMat.multiget("chrM", new Interval(0L, 100L), null)
 	}
-
 
 }

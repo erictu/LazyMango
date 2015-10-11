@@ -59,7 +59,8 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
       bookkeep(chr).insert(intl, ks.map( k => (k, true)))
     } else {
       val newTree = new IntervalTree[String, Boolean]()
-      newTree.insert(intl, ks.map( k => (k, true)))
+      val newks = ks.map( k => (k, true))
+      newTree.insert(intl, newks)
       bookkeep += ((chr, newTree))
     }
   }
@@ -83,7 +84,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext) {
       val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
       val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
       val loading = sc.loadAlignments(fp)
-  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => (("chr1",new Interval(rec.start, rec.end)), ("person1", rec)))
+  		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
   		intRDD = IntervalRDD(ready)
   		// Add our initial entry into our tree, then call get again, now with the data loaded
       rememberValues(chr, intl, ks)

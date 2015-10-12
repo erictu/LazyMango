@@ -46,9 +46,9 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 1050L), "person1")
 	}
 
-  sparkTest("perf test 1") {
-    val newChunkSize = 800
-    val intl = new Interval[Long](0L, 700L)
+  sparkTest("Performance Test 1, region of 0-1000") {
+    val newChunkSize = 1001L
+    val intl = new Interval[Long](0L, 1000L)
     var startTime = System.currentTimeMillis
     var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
     val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")  
@@ -75,22 +75,27 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
     diff = (endTime - startTime)
     println("query4: " + diff)
 
-
     startTime = System.currentTimeMillis
-    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
+    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
     endTime = System.currentTimeMillis
     diff = (endTime - startTime)
     println("query5: " + diff)
+
+    startTime = System.currentTimeMillis
+    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
+    val results6:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
+    endTime = System.currentTimeMillis
+    diff = (endTime - startTime)
+    println("query6: " + diff)
 
     assert(results1.get.head._2.size == results2.get.head._2.size)
 
   }
 
 
-  sparkTest("perfTest 2") {
-    val newChunkSize = 2000
-    val intl = new Interval[Long](0L, 1900L)
+  sparkTest("Performance Test 2: Chunk size < interval, region of 0-1000") {
+    val newChunkSize = 500L
+    val intl = new Interval[Long](0L, 1000L)
     var startTime = System.currentTimeMillis
     var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
     val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")  
@@ -112,18 +117,17 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 
 
     startTime = System.currentTimeMillis
-    val results4:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query4: " + diff)
-
-
-    startTime = System.currentTimeMillis
-    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
+    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
     endTime = System.currentTimeMillis
     diff = (endTime - startTime)
     println("query5: " + diff)
+
+    startTime = System.currentTimeMillis
+    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
+    val results6:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
+    endTime = System.currentTimeMillis
+    diff = (endTime - startTime)
+    println("query6: " + diff)
 
     assert(results1.get.head._2.size == results2.get.head._2.size)
 

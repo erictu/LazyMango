@@ -60,6 +60,9 @@ class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
 
   private def rememberValues(chr: String, intl: Interval[Long], ks: List[String]) = {
     // find chr in bookkeep
+    if (bookkeep.keys.size != 0) {
+      println(bookkeep.get("chrM").get.printNodes)
+    }
     if (bookkeep.contains(chr)) {
       bookkeep(chr).insert(intl, ks.map( k => (k, true)))
     } else {
@@ -90,6 +93,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
   }
 
   def loadFromFile(chr: String, intl: Interval[Long]): RDD[((String, Interval[Long]), (String, AlignmentRecord))]  = {
+    println("LOADING FROM DISK")
     if (fp.endsWith(".adam")) {
       loadadam(chr, intl)
     } else if (fp.endsWith(".sam") || fp.endsWith(".bam")) {
@@ -120,13 +124,25 @@ class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
 		} 
     else {
       val intls = partitionChunk(intl)
-      for (i <- intls) {
-        val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
-        // for all keys not in found, add to list
-        val notFound: List[String] = ks.filterNot(found.contains(_))
-        put(chr, i, notFound)
-      }
-      intRDD.multiget(chr, i, Option(ks))
+
+      //Is this necessary? This gives additional load even when it's there. I've uncommented it for now
+      // for (i <- intls) {
+      //   val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
+      //   // for all keys not in found, add to list
+      //   val notFound: List[String] = ks.filterNot(found.contains(_))
+      //   println("found is: " + found)
+      //   println("not found is: " + notFound)
+      //   println("PUTTING IN RDD")
+      //   put(chr, i, notFound)
+      // }
+      println("GETTING FROM RDD")
+      println(" ")
+      val start = System.currentTimeMillis
+      val returnVal = intRDD.multiget(chr, i, Option(ks))
+      val end = System.currentTimeMillis
+      println("TIME TO PERFORM INTERVALRDD.MULTIGET")
+      println(end - start)
+      returnVal
 		}
 	}
 
@@ -138,9 +154,9 @@ class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
 
     val pred: FilterPredicate = ((LongColumn("end") >= intl.start) && (LongColumn("start") <= intl.end))
     val proj = Projection(AlignmentRecordField.contig, AlignmentRecordField.readName, AlignmentRecordField.start, AlignmentRecordField.end, AlignmentRecordField.sequence, AlignmentRecordField.cigar, AlignmentRecordField.readNegativeStrand, AlignmentRecordField.readPaired)
-    val loading: RDD[AlignmentRecord] = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
-		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))
-    
+    // val loading: RDD[AlignmentRecord] = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
+    val loading: RDD[AlignmentRecord] = sc.loadAlignments(fp, projection = Some(proj))
+		val ready: RDD[((String, Interval[Long]), (String, AlignmentRecord))] = loading.map(rec => ((chr,new Interval(rec.start, rec.end)), ("person1", rec)))    
     intRDD.multiput(ready)
   	rememberValues(chr, intl, ks)
 	}

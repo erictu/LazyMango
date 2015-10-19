@@ -125,7 +125,8 @@ class LazyMaterialization(filePath: String, sc: SparkContext, chunkSize: Long) {
     else {
       val intls = partitionChunk(intl)
 
-      //Is this necessary? This gives additional load even when it's there. I've uncommented it for now
+      //NOTE: Commenting out this section allows perf test 2 to pass
+      //TODO: Is this necessary (for now)? This gives additional load even when it's there. I've uncommented it for now
       // for (i <- intls) {
       //   val found: List[String] = bookkeep(chr).search(i, ks).map(k => k._1)
       //   // for all keys not in found, add to list

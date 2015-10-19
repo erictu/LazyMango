@@ -1,4 +1,4 @@
-name := "LazyMango"
+name := "lazymango"
 
 version := "0.1-SNAPSHOT"
 

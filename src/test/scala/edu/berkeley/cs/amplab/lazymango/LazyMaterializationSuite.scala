@@ -196,4 +196,8 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 
 	}
 
+    sparkTest("look up from ADAM file") {
+        assert(0 == 1)
+    }
+
 }

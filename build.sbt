@@ -1,6 +1,6 @@
 name := "LazyMango"
 
-version := "0.1"
+version := "0.1-SNAPSHOT"
 
 organization := "edu.berkeley.cs.amplab"
 

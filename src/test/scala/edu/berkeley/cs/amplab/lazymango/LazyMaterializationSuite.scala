@@ -29,10 +29,13 @@ import org.apache.spark.SparkContext
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.bdgenomics.adam.models.{ ReferenceRegion, SequenceRecord, SequenceDictionary }
 import org.bdgenomics.adam.projections.{ Projection, VariantField, AlignmentRecordField, GenotypeField, NucleotideContigFragmentField, FeatureField }
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.adam.util.ADAMFunSuite
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
+
+import org.bdgenomics.adam.cli.DictionaryCommand
 
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
@@ -41,163 +44,84 @@ import org.scalatest.Matchers
 
 class LazyMaterializationSuite extends ADAMFunSuite  {
 
+	def getDataFromBamFile(file: String, viewRegion: ReferenceRegion): RDD[(ReferenceRegion, AlignmentRecord)] = {
+		val readsRDD: RDD[AlignmentRecord] = sc.loadIndexedBam(file, viewRegion)
+		readsRDD.keyBy(ReferenceRegion(_))
+	}
+
+	// TODO: reconsider placement of sd
+	val sd = new SequenceDictionary(Vector(SequenceRecord("chr1", 2000L),
+	    SequenceRecord("chrM", 2000L), 
+	    SequenceRecord("chr3", 2000L))) 
+
 	sparkTest("get data from lazy materialization structure") {
-	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
-	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", new Interval(0L, 1050L), "person1")
+		val bamFile = "./mouse_chrM.bam"
+	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, sd)
+	    val region = new ReferenceRegion("chrM", 0L, 1050L)
+	    val results:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
 	}
 
-  sparkTest("Performance Test 1, region of 0-1000") {
-    val newChunkSize = 1001L
-    val intl = new Interval[Long](0L, 1000L)
-    var startTime = System.currentTimeMillis
-    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")  
-    var endTime = System.currentTimeMillis
-    var diff = (endTime - startTime)
-    println("query1: " + diff)
+	sparkTest("assert the data pulled from a file is the same") {
+		val bamFile = "./mouse_chrM.bam"
+	    var lazyMat = LazyMaterialization(bamFile, sc, sd)
+	    val region = new ReferenceRegion("chrM", 0L, 100L)
+	    val results:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")		
+	    println(results.get)
+	   // results.get.get(0).map(rec => rec._2)
+	    val filedata = getDataFromBamFile(bamFile, region)
+	    val data = filedata.map(rec => rec._2)
+	    val dataSize = data.collect().length
 
-    startTime = System.currentTimeMillis
-    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query2: " + diff)
-
-    startTime = System.currentTimeMillis
-    val results3:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query3: " + diff)
-
-
-    startTime = System.currentTimeMillis
-    val results4:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query4: " + diff)
-
-    startTime = System.currentTimeMillis
-    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query5: " + diff)
-
-    startTime = System.currentTimeMillis
-    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results6:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query6: " + diff)
-
-    assert(results1.get.head._2.size == results2.get.head._2.size)
-
-  }
-
-
-  sparkTest("Performance Test 2: Chunk size < interval, region of 0-1000") {
-    val newChunkSize = 500L
-    val intl = new Interval[Long](0L, 1000L)
-    var startTime = System.currentTimeMillis
-    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")  
-    var endTime = System.currentTimeMillis
-    var diff = (endTime - startTime)
-    println("query1: " + diff)
-
-    startTime = System.currentTimeMillis
-    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query2: " + diff)
-
-    startTime = System.currentTimeMillis
-    val results3:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query3: " + diff)
-
-
-    startTime = System.currentTimeMillis
-    val results5:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query4: " + diff)
-
-    startTime = System.currentTimeMillis
-    var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-    val results6:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat2.get("chrM", intl, "person1")
-    endTime = System.currentTimeMillis
-    diff = (endTime - startTime)
-    println("query5: " + diff)
-
-    assert(results1.get.head._2.size == results2.get.head._2.size)
-
-  }
-
-	sparkTest("configurable chunk size") {
-		val newChunkSize = 3000
-		val intl = new Interval[Long](0L, 700L)
-
-	 	var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-	    val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")	
-	
- 		var defaultLazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
-	    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = defaultLazyMat.get("chrM", intl, "person1")
-
-		assert(results1.get.head._2.size == results2.get.head._2.size)
-
+	    println(dataSize)
 	}
 
-	sparkTest("reget data from lazy materialization structure") {
-	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
 
-	    val intl1: Interval[Long] = new Interval[Long](10L, 150L)
-	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl1, "person1")
-	    val intervals: (Interval[Long], List[(String, AlignmentRecord)])  = results.get.head
 
-	    intervals._2.foreach(k => assert(intl1.overlaps(new Interval(k._2.start, k._2.end))))
+	// sparkTest("Performance Test 1, region of 0-1000") {
+	// 	val newChunkSize = 1001L
+	// 	val region = new ReferenceRegion("chrM", 0L, 1000L)
+	// 	var startTime = System.currentTimeMillis
+	// 	var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, sd, newChunkSize)
+	// 	val results1:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")  
+	// 	var endTime = System.currentTimeMillis
+	// 	var diff = (endTime - startTime)
+	// 	println("query1: " + diff)
 
-	    val intl2: Interval[Long] = new Interval[Long](600L, 800L)
-		val results2: Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl2, "person1")
-	    // for each element in results2, check that they are between intl2
-	    val intervals2: (Interval[Long], List[(String, AlignmentRecord)])  = results2.get.head
+	// 	startTime = System.currentTimeMillis
+	// 	val results2:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query2: " + diff)
 
-	    intervals2._2.foreach(k => {
-	    	val testIntl = new Interval[Long](k._2.start, k._2.end)
-	    	val overlaps = intl2.overlaps(new Interval(k._2.start, k._2.end))
-	    	if (!overlaps) {
-	    		println(testIntl)
-	    		println("overlap was not in range")
-	    	}
-	    })
+	// 	startTime = System.currentTimeMillis
+	// 	val results3:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query3: " + diff)
 
-	    //intervals2._2.foreach(k => assert(intl2.overlaps(new Interval(k._2.start, k._2.end))))
-	}
 
-	sparkTest("look up intervals larger than chunk size") {
+	// 	startTime = System.currentTimeMillis
+	// 	val results4:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query4: " + diff)
 
-	 	val intl = new Interval[Long](0L, 1500L)
-	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc)
-	    val results:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl, "person1")
+	// 	startTime = System.currentTimeMillis
+	// 	val results5:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query5: " + diff)
 
-	    val intervals: List[(String, AlignmentRecord)]  = results.get.head._2
+	// 	startTime = System.currentTimeMillis
+	// 	var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, sd, newChunkSize)
+	// 	val results6:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat2.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query6: " + diff)
 
-	    intervals.foreach(k => assert(intl.overlaps(new Interval(k._2.start, k._2.end))))
+	// 	assert(results1.get.head._2.size == results2.get.head._2.size)
 
-	 	val intl1 = new Interval[Long](0L, 999L)
-	 	val intl2 = new Interval[Long](1000L, 1500L)
-	 	val results1:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl1, "person1")
-	    val results2:  Option[Map[Interval[Long], List[(String, AlignmentRecord)]]] = lazyMat.get("chrM", intl2, "person1")
+	// }
 
-		val combResults: List[(String, AlignmentRecord)] = results1.get.head._2 ::: results2.get.head._2
-
-		val filteredResults: List[(String, AlignmentRecord)] = combResults.distinct
-
-		assert(intervals.distinct.size ==filteredResults.distinct.size)
-
-	}
-
-    sparkTest("look up from ADAM file") {
-        assert(0 == 1)
-    }
 
 }

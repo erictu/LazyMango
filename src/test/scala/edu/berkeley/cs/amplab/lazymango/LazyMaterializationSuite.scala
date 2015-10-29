@@ -54,25 +54,26 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 	    SequenceRecord("chrM", 2000L), 
 	    SequenceRecord("chr3", 2000L))) 
 
-	sparkTest("get data from lazy materialization structure") {
-		val bamFile = "./mouse_chrM.bam"
-	    var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, sd)
-	    val region = new ReferenceRegion("chrM", 0L, 1050L)
-	    val results:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
-	}
+	// sparkTest("get data from lazy materialization structure") {
+	// 	val bamFile = "./mouse_chrM.bam"
+	//     var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, sd)
+	//     val region = new ReferenceRegion("chrM", 0L, 1050L)
+	//     val results:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")
+	// }
 
 	sparkTest("assert the data pulled from a file is the same") {
 		val bamFile = "./mouse_chrM.bam"
 	    var lazyMat = LazyMaterialization(bamFile, sc, sd)
 	    val region = new ReferenceRegion("chrM", 0L, 100L)
-	    val results:  Option[Map[ReferenceRegion, List[(String, AlignmentRecord)]]] = lazyMat.get(region, "person1")		
-	    println(results.get)
+	    val results:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")		
+	    val lazySize = results.get.get(region).get(0)._2.length
 	   // results.get.get(0).map(rec => rec._2)
 	    val filedata = getDataFromBamFile(bamFile, region)
 	    val data = filedata.map(rec => rec._2)
 	    val dataSize = data.collect().length
 
-	    println(dataSize)
+	    println("final data sizes", lazySize, dataSize)
+	    assert(dataSize == lazySize)
 	}
 
 

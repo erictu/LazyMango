@@ -60,10 +60,6 @@ class LazyMaterialization(filePath: String, sc: SparkContext, dict: SequenceDict
 
 
   private def rememberValues(region: ReferenceRegion, ks: List[String]) = {
-    // find chr in bookkeep
-    if (bookkeep.keys.size != 0) {
-      println(bookkeep.get("chrM").get.printNodes)
-    }
     if (bookkeep.contains(region.referenceName)) {
       bookkeep(region.referenceName).insert(region, ks.map( k => (k, true)))
     } else {
@@ -115,7 +111,6 @@ class LazyMaterialization(filePath: String, sc: SparkContext, dict: SequenceDict
       val ready = loadFromFile(matRegion)
       val data = Array((region, ("person1", ready.collect.toList)))
       val rdd = sc.parallelize(data)
-      println("initial records to be added to intervalrdd")
   		intRDD = IntervalRDD(rdd, dict)
       rememberValues(matRegion, ks)
       filterByRegion(intRDD.multiget(region, Option(ks)))

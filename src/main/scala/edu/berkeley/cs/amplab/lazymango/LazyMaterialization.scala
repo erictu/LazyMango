@@ -45,8 +45,12 @@ import collection.mutable.HashMap
 //TODO: Have it do things other than AlignmentRecord, currently just trying it out
 class LazyMaterialization(filePath: String, sc: SparkContext, dict: SequenceDictionary, chunkSize: Long) {
 
-  def this(filePath: String, sc: SparkContext, dict: SequenceDictionary) = {
-    this(filePath, sc, dict, 1000)
+  def this(filePath: String, sc: SparkContext, chunkSize: Long) = {
+    this(filePath, sc, sc.adamDictionaryLoad[AlignmentRecord](filePath), chunkSize)
+  }
+
+  def this(filePath: String, sc: SparkContext) = {
+    this(filePath, sc, sc.adamDictionaryLoad[AlignmentRecord](filePath), 1000)
   }
 
   // TODO: could merge into 1 interval tree with nodes storing (chr, list(keys)). Storing the booleans is a waste of space
@@ -140,7 +144,7 @@ class LazyMaterialization(filePath: String, sc: SparkContext, dict: SequenceDict
     // val loading: RDD[AlignmentRecord] = sc.loadParquetAlignments(fp, predicate = Some(pred), projection = Some(proj))
     val loading: RDD[AlignmentRecord] = sc.loadAlignments(fp, projection = Some(proj))
     val ready: RDD[(ReferenceRegion, (String, List[AlignmentRecord]))]  = sc.parallelize(Array((region, ("person1", loading.collect.toList))))
-    intRDD.multiput(ready)
+    intRDD.multiput(ready, dict)
   	rememberValues(region, ks)
 	}
 
@@ -187,10 +191,10 @@ case class UnsupportedFileException(message: String) extends Exception(message)
 object LazyMaterialization {
 
   //Create a Lazy Materialization object by feeding in a file path to build an RDD from
-	def apply(filePath: String, sc: SparkContext, dict: SequenceDictionary): LazyMaterialization = {
-		new LazyMaterialization(filePath, sc, dict)
+	def apply(filePath: String, sc: SparkContext): LazyMaterialization = {
+		new LazyMaterialization(filePath, sc)
 	}
-  def apply(filePath: String, sc: SparkContext, dict: SequenceDictionary, chunkSize: Long): LazyMaterialization = {
-    new LazyMaterialization(filePath, sc, dict, chunkSize)
+  def apply(filePath: String, sc: SparkContext, chunkSize: Long): LazyMaterialization = {
+    new LazyMaterialization(filePath, sc, chunkSize)
   }
 }

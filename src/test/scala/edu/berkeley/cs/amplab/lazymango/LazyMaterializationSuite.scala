@@ -42,7 +42,7 @@ import scala.io.Source
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-class LazyMaterializationSuite extends ADAMFunSuite  {
+class LazyMaterializationSuite extends LazyFunSuite  {
 
 	def getDataFromBamFile(file: String, viewRegion: ReferenceRegion): RDD[(ReferenceRegion, AlignmentRecord)] = {
 		val readsRDD: RDD[AlignmentRecord] = sc.loadIndexedBam(file, viewRegion)
@@ -65,88 +65,115 @@ class LazyMaterializationSuite extends ADAMFunSuite  {
 	sparkTest("assert the data pulled from a file is the same") {
 		val bamFile = "./mouse_chrM.bam"
 	    var lazyMat = LazyMaterialization(bamFile, sc)
-	    val region = new ReferenceRegion("chrM", 0L, 100L)
-	    val results:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")		
-	    val lazySize = results.get.get(region).get(0)._2.length
-	   // results.get.get(0).map(rec => rec._2)
-	    val filedata = getDataFromBamFile(bamFile, region)
-	    val data = filedata.map(rec => rec._2)
-	    val dataSize = data.collect().length
-
-	    println("final data sizes", lazySize, dataSize)
-	    assert(dataSize == lazySize)
-	}
-
-	sparkTest("Performance Test 1, region of 0-1000") {
-		val newChunkSize = 1001L
-		val region = new ReferenceRegion("chrM", 0L, 100L)
+	    val region = new ReferenceRegion("chrM", 0L, 1000L)
 		var startTime = System.currentTimeMillis
-		var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-		val results1:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
-		println("Query 1 datasize: ", results1.get.get(region).get(0)._2.length) 
-		var endTime = System.currentTimeMillis
+
+	    var results:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")		
+	    var lazySize = results.get.get(region).get(0)._2.length
+	   // results.get.get(0).map(rec => rec._2)
+   		var endTime = System.currentTimeMillis
 		var diff = (endTime - startTime)
 		println("query1: " + diff)
 
 		startTime = System.currentTimeMillis
-		val results2:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
-		println("Query 1 datasize: ", results2.get.get(region).get(0)._2.length)
-		endTime = System.currentTimeMillis
+		lazyMat.get(region, "person1")
+  		endTime = System.currentTimeMillis
 		diff = (endTime - startTime)
 		println("query2: " + diff)
 
-		startTime = System.currentTimeMillis
-		val results3:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
-		endTime = System.currentTimeMillis
-		diff = (endTime - startTime)
-		println("query3: " + diff)
+		// startTime = System.currentTimeMillis
+		// lazyMat.get(region, "person1")
+  // 		endTime = System.currentTimeMillis
+		// diff = (endTime - startTime)
+		// println("query3: " + diff)
 
+		// startTime = System.currentTimeMillis
+		// lazyMat.get(region, "person1")
+  // 		endTime = System.currentTimeMillis
+		// diff = (endTime - startTime)
+		// println("query4: " + diff)
+		// startTime = System.currentTimeMillis
+	 //    val filedata = getDataFromBamFile(bamFile, region)
+	 //    endTime = System.currentTimeMillis
+	 //    diff = endTime - startTime
+	 //    println("direct load:" + diff)
+	 //    val data = filedata.map(rec => rec._2)
+	 //    val dataSize = data.collect().length
 
-		startTime = System.currentTimeMillis
-		val results4:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
-		endTime = System.currentTimeMillis
-		diff = (endTime - startTime)
-		println("query4: " + diff)
-
-		startTime = System.currentTimeMillis
-		val results5:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
-		endTime = System.currentTimeMillis
-		diff = (endTime - startTime)
-		println("query5: " + diff)
-
-		startTime = System.currentTimeMillis
-		var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
-		val results6:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat2.get(region, "person1")
-		endTime = System.currentTimeMillis
-		diff = (endTime - startTime)
-		println("query6: " + diff)
-
-		assert(results1.get.head._2.size == results2.get.head._2.size)
-
+	 //    println("final data sizes", lazySize, dataSize)
+	 //    assert(dataSize == lazySize)
 	}
 
-	sparkTest("get data from different chromosomes") {
-		val bamFile = "./mouse_chrM.bam"
-	    var lazyMat = LazyMaterialization(bamFile, sc)
-	    val region = new ReferenceRegion("chrM", 0L, 100L)
-	    val results:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")		
-	    val lazySize = results.get.get(region).get(0)._2.length
-	   // results.get.get(0).map(rec => rec._2)
-	    val filedata = getDataFromBamFile(bamFile, region)
-	    val data = filedata.map(rec => rec._2)
-	    val dataSize = data.collect().length
+	// sparkTest("Performance Test 1, region of 0-1000") {
+	// 	val newChunkSize = 1001L
+	// 	val region = new ReferenceRegion("chrM", 0L, 100L)
+	// 	var startTime = System.currentTimeMillis
+	// 	var lazyMat = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
+	// 	val results1:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
+	// 	println("Query 1 datasize: ", results1.get.get(region).get(0)._2.length) 
+	// 	var endTime = System.currentTimeMillis
+	// 	var diff = (endTime - startTime)
+	// 	println("query1: " + diff)
 
-	    println("final data sizes", lazySize, dataSize)
-	    assert(dataSize == lazySize)
-	}
+	// 	startTime = System.currentTimeMillis
+	// 	val results2:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
+	// 	println("Query 1 datasize: ", results2.get.get(region).get(0)._2.length)
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query2: " + diff)
 
-	sparkTest("Get data using adam file and compare results") {
+	// 	startTime = System.currentTimeMillis
+	// 	val results3:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query3: " + diff)
 
-	}
 
-	sparkTest("Get data from different samples at the same region") {
+	// 	startTime = System.currentTimeMillis
+	// 	val results4:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query4: " + diff)
 
-	}
+	// 	startTime = System.currentTimeMillis
+	// 	val results5:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query5: " + diff)
+
+	// 	startTime = System.currentTimeMillis
+	// 	var lazyMat2 = LazyMaterialization("./mouse_chrM.bam", sc, newChunkSize)
+	// 	val results6:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat2.get(region, "person1")
+	// 	endTime = System.currentTimeMillis
+	// 	diff = (endTime - startTime)
+	// 	println("query6: " + diff)
+
+	// 	assert(results1.get.head._2.size == results2.get.head._2.size)
+
+	// }
+
+	// sparkTest("get data from different chromosomes") {
+	// 	val bamFile = "./mouse_chrM.bam"
+	//     var lazyMat = LazyMaterialization(bamFile, sc)
+	//     val region = new ReferenceRegion("chrM", 0L, 100L)
+	//     val results:  Option[Map[ReferenceRegion, List[(String, List[AlignmentRecord])]]] = lazyMat.get(region, "person1")		
+	//     val lazySize = results.get.get(region).get(0)._2.length
+	//    // results.get.get(0).map(rec => rec._2)
+	//     val filedata = getDataFromBamFile(bamFile, region)
+	//     val data = filedata.map(rec => rec._2)
+	//     val dataSize = data.collect().length
+
+	//     println("final data sizes", lazySize, dataSize)
+	//     assert(dataSize == lazySize)
+	// }
+
+	// sparkTest("Get data using adam file and compare results") {
+
+	// }
+
+	// sparkTest("Get data from different samples at the same region") {
+
+	// }
 
 
 }

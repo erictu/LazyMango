@@ -173,9 +173,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
 	def multiget(region: ReferenceRegion, ks: List[String]): Option[Map[ReferenceRegion, List[(String, List[T])]]] = {
 
     val matRegion: ReferenceRegion = getChunk(region)
-    println("in multiget")
 		if (intRDD == null) {
-      println("rdd is null")
       // load all data from keys
       val rdd: RDD[(ReferenceRegion, (String, List[T]))] = loadFromFile(ks, matRegion).groupByKey.map(r => (region, (r._1, r._2.toList)))
   		intRDD = IntervalRDD(rdd, dict)
@@ -183,9 +181,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
       filterByRegion(intRDD.multiget(region, Option(ks)))
 		} else {
       val regions = partitionChunk(matRegion)
-      println("rdd is NOT null")
       for (r <- regions) {
-        println(r)
         val keys = bookkeep(r.referenceName).search(r, ks)
         val found: List[String] = keys.map(k => k._1)
         val notFound: List[String] = ks.filterNot(found.contains(_))
@@ -202,12 +198,9 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
 	* Then puts fetched data in the IntervalRDD, and calls multiget again, now with the data existing
 	*/
   private def put(region: ReferenceRegion, ks: List[String]) = {
-    println("keys not in rdd")
-    println(ks)
     val rdd: RDD[(ReferenceRegion, (String, List[T]))] = loadFromFile(ks, region).groupByKey.map(r => (region, (r._1, r._2.toList)))
     intRDD.multiput(rdd, dict)
   	rememberValues(region, ks)
-    null
 	}
 
   // get block chunk of request

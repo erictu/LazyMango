@@ -24,6 +24,7 @@ libraryDependencies += "org.apache.parquet" %% "parquet-scala" % "1.8.1"
 
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.2" % "test"
 
-javaOptions in test += "-Xmx2G"
+javaOptions in test += "-Xmx4G"
+javaOptions in Test += "-agentpath:/path/to/yjp"
 
 //fork in test := true

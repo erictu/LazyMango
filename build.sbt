@@ -6,7 +6,7 @@ organization := "edu.berkeley.cs.amplab"
 
 scalaVersion := "2.10.4"
 
-libraryDependencies += "org.apache.spark" %% "spark-core" % "1.5.0"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "1.4.0"
 
 publishMavenStyle := true
 
@@ -24,6 +24,7 @@ libraryDependencies += "org.apache.parquet" %% "parquet-scala" % "1.8.1"
 
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.12.2" % "test"
 
-javaOptions in test += "-Xmx2G"
+javaOptions in test += "-Xmx4G"
+javaOptions in Test += "-agentpath:/path/to/yjp"
 
 //fork in test := true

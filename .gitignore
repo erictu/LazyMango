@@ -12,7 +12,10 @@ lib_managed/
 src_managed/
 project/boot/
 project/plugins/project/
-
+mouse_chrM_p1.bam
+mouse_chrM_p1.bam.bai
+mouse_chrM_p2.bam
+mouse_chrM_p2.bam.bai
 # Scala-IDE specific
 .scala_dependencies
 .worksheet

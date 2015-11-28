@@ -75,6 +75,8 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
   // Keeps track of sample ids and corresponding files
   private var fileMap: HashMap[String, String] = new HashMap()
 
+  def getFileMap(): HashMap[String, String] = fileMap
+
   // TODO: could merge into 1 interval tree with nodes storing (chr, list(keys)). Storing the booleans is a waste of space
   private var bookkeep: HashMap[String, IntervalTree[String, Boolean]] = new HashMap()
 
@@ -191,9 +193,12 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
       val regions = partitionChunk(matRegion)
       for (r <- regions) {
         val keys = bookkeep(r.referenceName).search(r, ks)
+
         val found: Iterator[String] = keys.map(k => k._1)
         val notFound:  List[String] = ks.filterNot(found.toList.contains(_))
-        put(r, notFound)
+        if (notFound.length > 0) {
+          put(r, notFound)
+        }
       }
     }
     filterByRegion(region, intRDD.multiget(region, Option(ks)))

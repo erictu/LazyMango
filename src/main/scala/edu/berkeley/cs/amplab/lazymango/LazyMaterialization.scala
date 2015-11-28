@@ -77,12 +77,18 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
 
   private def rememberValues(region: ReferenceRegion, ks: List[String]) = {
     if (bookkeep.contains(region.referenceName)) {
-      bookkeep(region.referenceName).insert(region, ks.map( k => (k, true)))
+      println("LMREMEMBERVALUES: CONTAINS REFNAME")
+      var result = bookkeep(region.referenceName).insert(region, ks.map( k => (k, true)))
+      bookkeep(region.referenceName).printNodes()
+      result
     } else {
+      println("LMREMEMBERVALUES: ADDING NEW ENTRY")
       val newTree = new IntervalTree[String, Boolean]()
       val newks = ks.map( k => (k, true))
       newTree.insert(region, newks)
-      bookkeep += ((region.referenceName, newTree))
+      var result = bookkeep += ((region.referenceName, newTree))
+      bookkeep(region.referenceName).printNodes()
+      result
     }
   }
 
@@ -118,7 +124,10 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
     if (!idxFile.exists()) {
       sc.loadBam(fp).filterByOverlappingRegion(region).asInstanceOf[RDD[T]]
     } else {
-      sc.loadIndexedBam(fp, region).asInstanceOf[RDD[T]]
+      println("LMLOADBAM: LOAD INDEXED BAM")
+      val returned = sc.loadIndexedBam(fp, region).asInstanceOf[RDD[T]]
+      println(returned.count())
+      returned
     }
   }
 
@@ -130,6 +139,9 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
   def loadFromFile(ks: List[String], region: ReferenceRegion): RDD[(String, T)]  = {
     var ret: RDD[(String, T)] = null
     var load: RDD[(String, T)] = null
+    println("LMLOADFROMFILE: LOADING FROM FILE")
+    println(ks)
+    println(region)
 
     for (k <- ks) {
       if (!fileMap.containsKey(k)) {
@@ -176,17 +188,29 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
     val matRegion: ReferenceRegion = getChunk(region)
 		if (intRDD == null) {
       // load all data from keys
-      val rdd: RDD[(ReferenceRegion, (String, List[T]))] = loadFromFile(ks, matRegion).groupByKey.map(r => (region, (r._1, r._2.toList)))
+      println("LMMULTIGET: INTRDD NULL")
+      val rdd: RDD[(ReferenceRegion, (String, List[T]))] = loadFromFile(ks, matRegion).groupByKey.map(r => (matRegion, (r._1, r._2.toList)))
+      println("LMMULTIGET: MAPPED RDD SIZE")
+      println(rdd.count())
   		intRDD = IntervalRDD(rdd, dict)
       rememberValues(matRegion, ks)
       filterByRegion(intRDD.multiget(region, Option(ks)))
 		} else {
+      println("LMMULTIGET: GO THROUGH REGIONS")
       val regions = partitionChunk(matRegion)
+      println(regions)
       for (r <- regions) {
         val keys = bookkeep(r.referenceName).search(r, ks)
         val found: List[String] = keys.map(k => k._1)
         val notFound: List[String] = ks.filterNot(found.contains(_))
+        println("LMMULTIGET: FOUND")
+        println(found)
+        println("LMMULTIGET: NOTFOUND")
+        println(notFound)
+        println(notFound.length)
+        println(notFound.length >0)
         if (notFound.length > 0) {
+          println("MULTIGET: GOING TO PUT")
           put(r, notFound)
         }
       }
@@ -201,8 +225,13 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long)  exten
 	* Then puts fetched data in the IntervalRDD, and calls multiget again, now with the data existing
 	*/
   private def put(region: ReferenceRegion, ks: List[String]) = {
+    println("LMPUT: PUTTING THE DATA")
+    println(region)
+    println(ks)
     val rdd: RDD[(ReferenceRegion, (String, List[T]))] = loadFromFile(ks, region).groupByKey.map(r => (region, (r._1, r._2.toList)))
-    intRDD.multiput(rdd, dict)
+    println("LMPUT: RDDSIZE")
+    println(rdd.count())
+    intRDD = intRDD.multiput(rdd, dict)
   	rememberValues(region, ks)
 	}
 

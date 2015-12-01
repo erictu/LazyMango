@@ -58,8 +58,9 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
       dict = sc.adamDictionaryLoad[AlignmentRecord](filePath)
     // TODO: this does not work for vcf files
     } else {
-      dict = new SequenceDictionary(Vector(SequenceRecord("chr1", 1000L),
-        SequenceRecord("chrM", 1000L)))
+    //  dict = new SequenceDictionary(Vector(SequenceRecord("chr1", 1000L),
+    //    SequenceRecord("chrM", 1000L)))
+	dict = null
     }
 
   }
@@ -152,7 +153,10 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
       if (fp.endsWith(".adam")) {
         load = loadadam(region, fp).map(r => (k, r))
       } else if (fp.endsWith(".sam") || fp.endsWith(".bam")) {
-        load = loadbam(region, fp).map(r => (k, r))
+        var loaded = loadbam(region, fp)
+	loaded.collect()
+	load = loaded.map(r=>(k,r))
+	load.collect()
       } else if (fp.endsWith(".vcf")) {
         load = sc.loadGenotypes(fp).filterByOverlappingRegion(region).asInstanceOf[RDD[T]].map(r => (k, r))
       } else if (fp.endsWith(".bed")) {
@@ -166,6 +170,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
         ret = load
       } else {
         ret = ret.union(load)
+	ret.collect()
       }
     }
     ret

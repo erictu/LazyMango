@@ -171,7 +171,6 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
         ret = load
       } else {
         ret = ret.union(load)
-	ret.collect()
       }
     }
     ret

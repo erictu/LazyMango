@@ -73,8 +73,8 @@ class LazyPerformanceSuite extends LazyFunSuite  {
 
 		// load data from files
 		for( i <- 0 to sampleCount ) {
-			val results1:  Map[String, List[AlignmentRecord]] = lazyMat.get(region, samples(i))
-	    assert ( results1(samples(i)).size == sampleSize )
+			val results1:  List[AlignmentRecord] = lazyMat.get(region, samples(i))
+	    assert ( results1.size == sampleSize )
 		}
 	}
 

@@ -32,15 +32,16 @@ import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
+import org.apache.avro.specific.SpecificRecord
 import org.bdgenomics.adam.models.{ ReferenceRegion, SequenceDictionary, SequenceRecord }
 import org.bdgenomics.adam.projections.{ Projection, VariantField, AlignmentRecordField, GenotypeField, NucleotideContigFragmentField, FeatureField }
 import org.bdgenomics.adam.rdd.ADAMContext._
 import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
 
-import org.bdgenomics.adam.models.ReferenceRegion
-
 import scala.collection.mutable.ListBuffer
 import collection.mutable.HashMap
+
+// TODO: remove
 
 class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extends Serializable with Logging {
 
@@ -48,21 +49,24 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
 
   def this(sc: SparkContext) = {
     // TODO sequence dictionary from other types besides Alignment record?
-    this(sc, 1000)
+    this(sc, 10000)
   }
 
   def setDictionary(filePath: String) {
 
     val isAlignmentRecord = classOf[AlignmentRecord].isAssignableFrom(classTag[T].runtimeClass)
+    val isGenotype = classOf[Genotype].isAssignableFrom(classTag[T].runtimeClass)
+
     if (isAlignmentRecord) {
       dict = sc.adamDictionaryLoad[AlignmentRecord](filePath)
-    // TODO: this does not work for vcf files
-    } else {
-    //  dict = new SequenceDictionary(Vector(SequenceRecord("chr1", 1000L),
-    //    SequenceRecord("chrM", 1000L)))
-	dict = null
+    } else if (isGenotype){
+      val projection = Projection(GenotypeField.variant)
+      val projected: RDD[Genotype] = sc.loadParquet[Genotype](filePath, None, projection = Some(projection))
+      val recs: RDD[SequenceRecord] = projected.distinct().map(rec => SequenceRecord(rec.getVariant.getContig.getContigName, (rec.getVariant.getEnd - rec.getVariant.getStart)))
+      dict = recs.aggregate(SequenceDictionary())(
+        (dict: SequenceDictionary, rec: SequenceRecord) => dict + rec,
+        (dict1: SequenceDictionary, dict2: SequenceDictionary) => dict1 ++ dict2)
     }
-
   }
 
   // Stores location of sample at a given filepath
@@ -153,10 +157,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
       if (fp.endsWith(".adam")) {
         load = loadadam(region, fp).map(r => (k, r))
       } else if (fp.endsWith(".sam") || fp.endsWith(".bam")) {
-        var loaded = loadbam(region, fp)
-	loaded.collect()
-	load = loaded.map(r=>(k,r))
-	load.collect()
+        load = loadbam(region, fp).map(r=>(k,r))
       } else if (fp.endsWith(".vcf")) {
         load = sc.loadGenotypes(fp).filterByOverlappingRegion(region).asInstanceOf[RDD[T]].map(r => (k, r))
       } else if (fp.endsWith(".bed")) {
@@ -176,8 +177,8 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
     ret
   }
 
-  def get(region: ReferenceRegion, k: String): Map[String, List[T]] = {
-    multiget(region, List(k))
+  def get(region: ReferenceRegion, k: String): List[T] = {
+    multiget(region, List(k)).toList.map(elem => elem._2).flatten
   }
 
   /* If the RDD has not been initialized, initialize it to the first get request

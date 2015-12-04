@@ -36,7 +36,7 @@ import org.apache.avro.specific.SpecificRecord
 import org.bdgenomics.adam.models.{ ReferenceRegion, SequenceDictionary, SequenceRecord }
 import org.bdgenomics.adam.projections.{ Projection, VariantField, AlignmentRecordField, GenotypeField, NucleotideContigFragmentField, FeatureField }
 import org.bdgenomics.adam.rdd.ADAMContext._
-import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment }
+import org.bdgenomics.formats.avro.{ AlignmentRecord, Feature, Genotype, GenotypeAllele, NucleotideContigFragment, Contig }
 
 import scala.collection.mutable.ListBuffer
 import collection.mutable.HashMap
@@ -49,7 +49,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
 
   def this(sc: SparkContext) = {
     // TODO sequence dictionary from other types besides Alignment record?
-    this(sc, 10000)
+    this(sc, 1000)
   }
 
   def setDictionary(filePath: String) {
@@ -62,7 +62,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
     } else if (isGenotype){
       val projection = Projection(GenotypeField.variant)
       val projected: RDD[Genotype] = sc.loadParquet[Genotype](filePath, None, projection = Some(projection))
-      val recs: RDD[SequenceRecord] = projected.distinct().map(rec => SequenceRecord(rec.getVariant.getContig.getContigName, (rec.getVariant.getEnd - rec.getVariant.getStart)))
+      val recs: RDD[SequenceRecord] = projected.map(rec => SequenceRecord(rec.getVariant.getContig.getContigName, (rec.getVariant.end - rec.getVariant.start))).distinct()
       dict = recs.aggregate(SequenceDictionary())(
         (dict: SequenceDictionary, rec: SequenceRecord) => dict + rec,
         (dict1: SequenceDictionary, dict2: SequenceDictionary) => dict1 ++ dict2)
@@ -197,12 +197,18 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
     } else {
       val regions = partitionChunk(matRegion)
       for (r <- regions) {
-        val keys = bookkeep(r.referenceName).search(r, ks)
-
-        val found: Iterator[String] = keys.map(k => k._1)
-        val notFound:  List[String] = ks.filterNot(found.toList.contains(_))
-        if (notFound.length > 0) {
-          put(r, notFound)
+        try {
+          val keys = bookkeep(r.referenceName).search(r, ks)
+          val found: Iterator[String] = keys.map(k => k._1)
+          val notFound:  List[String] = ks.filterNot(found.toList.contains(_))
+          if (notFound.length > 0) {
+            put(r, notFound)
+          }
+        } catch {
+           case ex: NoSuchElementException => {
+             log.warn("File not found in bookkeep")
+             null
+           }
         }
       }
     }

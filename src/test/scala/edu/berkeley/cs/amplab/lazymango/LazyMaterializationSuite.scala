@@ -103,14 +103,24 @@ class LazyMaterializationSuite extends LazyFunSuite  {
 	// }
 
 	sparkTest("Get data for variants") {
-		val region = new ReferenceRegion("chr1", 0L, 100L)
-		val vcfFile = "./true.vcf.adam"
+		val region = new ReferenceRegion("20", 0L, 100L)
+		val vcfFile = "./trueFile.vcf.adam"
 		val callset = "callset1"
 		var lazyMat = LazyMaterialization[Genotype](sc)
 		lazyMat.loadSample(callset, vcfFile)
 
 		val results1:  List[Genotype] = lazyMat.get(region, callset)
-		assert(results1.size == 3)
+
+		// val bamFile = "./mouse_chrM.bam.adam"
+		//
+    // val sample = "sample1"
+		//
+	  // var lazyMatAlign = LazyMaterialization[AlignmentRecord](sc)
+		// lazyMatAlign.loadSample(sample, bamFile)
+		//
+	  // val region2 = new ReferenceRegion("chrM", 0L, 100L)
+		//
+    // var results: List[AlignmentRecord] = lazyMatAlign.get(region2, sample)
 	}
 
 }

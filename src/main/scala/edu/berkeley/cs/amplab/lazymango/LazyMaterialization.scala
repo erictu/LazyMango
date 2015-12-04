@@ -49,7 +49,7 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
 
   def this(sc: SparkContext) = {
     // TODO sequence dictionary from other types besides Alignment record?
-    this(sc, 10000)
+    this(sc, 1000)
   }
 
   def setDictionary(filePath: String) {

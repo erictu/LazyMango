@@ -67,7 +67,7 @@ class LazyMaterializationSuite extends LazyFunSuite  {
 	}
 
 	sparkTest("assert the data pulled from a file is the same") {
-		val bamFile = "./mouse_chrM_p1.bam"
+		val bamFile = "./workfiles/mouse.adam"
     val sample = "sample1"
 
 	  var lazyMat = LazyMaterialization[AlignmentRecord](sc)

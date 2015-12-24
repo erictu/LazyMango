@@ -211,7 +211,6 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
         }
       }
     }
-    // TODO: partition by region here?
     filterByRegionAndKey(region, ks)
   }
 
@@ -251,9 +250,9 @@ class LazyMaterialization[T: ClassTag](sc: SparkContext, chunkSize: Long) extend
     val isAlignmentRecord = classOf[AlignmentRecord].isAssignableFrom(classTag[T].runtimeClass)
     val isGenotype = classOf[Genotype].isAssignableFrom(classTag[T].runtimeClass)
 
-    if (isAlignmentRecord)
-      intRDD.asInstanceOf[IntervalRDD[AlignmentRecord]].filterByRegion(region).collect.groupBy(_.recordGroupSample).asInstanceOf[Map[String, Array[T]]]
-    else if (isGenotype)
+    if (isAlignmentRecord) {
+      intRDD.asInstanceOf[IntervalRDD[AlignmentRecord]].filterByRegion(region).collect.filter(ReferenceRegion(_).overlaps(region)).groupBy(_.recordGroupSample).asInstanceOf[Map[String, Array[T]]]
+    } else if (isGenotype)
       intRDD.asInstanceOf[IntervalRDD[Genotype]].filterByRegion(region).collect.groupBy(_.sampleId).asInstanceOf[Map[String, Array[T]]]
     else {
       log.warn("type not supported")

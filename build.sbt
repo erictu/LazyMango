@@ -9,6 +9,7 @@ scalaVersion := "2.10.4"
 libraryDependencies += "org.apache.spark" %% "spark-core" % "1.4.0"
 
 publishMavenStyle := true
+resolvers += Resolver.mavenLocal
 
 licenses += "Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0.html")
 

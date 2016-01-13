@@ -53,38 +53,39 @@ class LazyMaterializationSuite extends LazyFunSuite  {
 	val sd = new SequenceDictionary(Vector(SequenceRecord("chr1", 2000L),
 	    SequenceRecord("chrM", 2000L),
 	    SequenceRecord("chr3", 2000L)))
-	//
-	// sparkTest("get data from lazy materialization structure") {
-	// 	val bamFile = "./mouse_chrM_p1.bam"
-	//     var lazyMat = LazyMaterialization[AlignmentRecord](sc)
-	//
-	//     val sample = "person1"
-	//     lazyMat.loadSample(sample, bamFile)
-	//     val region = new ReferenceRegion("chrM", 0L, 1050L)
-	//     val results: Map[String, List[AlignmentRecord]]  = lazyMat.get(region, sample)
-	//
-	// }
 
-	// sparkTest("assert the data pulled from a file is the same") {
-	// 	val bamFile = "./mouse_chrM_p1.bam"
-  //   val sample = "sample1"
-	//
-	//   var lazyMat = LazyMaterialization[AlignmentRecord](sc)
-	// 	lazyMat.loadSample(sample, bamFile)
-	//
-	//   val region = new ReferenceRegion("chrM", 0L, 1000L)
-	//
-  //   var results: Map[String, List[AlignmentRecord]] = lazyMat.get(region, sample)
-  //   var lazySize = results(sample).length
-  //   val filedata = getDataFromBamFile(bamFile, region)
-  //   val data = filedata.map(rec => rec._2)
-  //   val dataSize = data.collect().length
-	//
-  //   assert(dataSize == lazySize)
-	// }
+	sparkTest("get data from lazy materialization structure") {
+		val bamFile = "./workfiles/mouse.adam"
+
+    var lazyMat = LazyMaterialization[AlignmentRecord](sc)
+		println("loading sample")
+    val sample = "person1"
+    lazyMat.loadSample(sample, bamFile)
+    val region = new ReferenceRegion("chrM", 0L, 1050L)
+		println(region)
+    val results  = lazyMat.get(region, sample)
+	}
+
+	sparkTest("assert the data pulled from a file is the same") {
+		val bamFile = "./workfiles/mouse.adam"
+    val sample = "sample1"
+
+	  var lazyMat = LazyMaterialization[AlignmentRecord](sc)
+		lazyMat.loadSample(sample, bamFile)
+
+	  val region = new ReferenceRegion("chrM", 0L, 1000L)
+
+    var results = lazyMat.get(region, sample)
+    var lazySize = results.length
+    val filedata = getDataFromBamFile(bamFile, region)
+    val data = filedata.map(rec => rec._2)
+    val dataSize = data.collect().length
+
+    assert(dataSize == lazySize)
+	}
 
 	sparkTest("Get data from different samples at the same region") {
-		val bamFile = "./mouse_chrM_p1.bam"
+		val bamFile = "./workfiles/mouse.adam"
 		val sample1 = "person1"
 		val sample2 = "person2"
 
@@ -92,25 +93,35 @@ class LazyMaterializationSuite extends LazyFunSuite  {
 	    val region = new ReferenceRegion("chrM", 0L, 100L)
 	    lazyMat.loadSample(sample1, bamFile)
 	    lazyMat.loadSample(sample2, bamFile)
-	    val results1:  Map[String, List[AlignmentRecord]] = lazyMat.get(region, sample1)
-	    val lazySize1 = results1(sample1).size
+	    val results1 = lazyMat.get(region, sample1)
+	    val lazySize1 = results1.size
 
-	    val results2:  Map[String, List[AlignmentRecord]] = lazyMat.get(region, sample2)
-	    val lazySize2 = results2(sample2).size
+	    val results2 = lazyMat.get(region, sample2)
+	    val lazySize2 = results2.size
 
 	    assert(lazySize1 == lazySize2)
 			assert(lazySize1 == 1074)
 	}
 
-	sparkTest("Get data for variants") {
-		val region = new ReferenceRegion("chr1", 0L, 100L)
-		val vcfFile = "./true.vcf"
-		val callset = "callset1"
-		var lazyMat = LazyMaterialization[Genotype](sc)
-		lazyMat.loadSample(callset, vcfFile)
-
-		val results1:  Map[String, List[Genotype]]= lazyMat.get(region, callset)
-		assert(results1(callset).size == 3)
-	}
+	// sparkTest("Get data for variants") {
+	// 	val region = new ReferenceRegion("20", 0L, 100L)
+	// 	val vcfFile = "./workfiles/trueFile.vcf.adam"
+	// 	val callset = "callset1"
+	// 	var lazyMat = LazyMaterialization[Genotype](sc)
+	// 	lazyMat.loadSample(callset, vcfFile)
+	//
+	// 	val results1 = lazyMat.get(region, callset)
+	//
+	// 	// val bamFile = "./mouse_chrM.bam.adam"
+	// 	//
+  //   // val sample = "sample1"
+	// 	//
+	//   // var lazyMatAlign = LazyMaterialization[AlignmentRecord](sc)
+	// 	// lazyMatAlign.loadSample(sample, bamFile)
+	// 	//
+	//   // val region2 = new ReferenceRegion("chrM", 0L, 100L)
+	// 	//
+  //   // var results: List[AlignmentRecord] = lazyMatAlign.get(region2, sample)
+	// }
 
 }

@@ -9,6 +9,7 @@
 dist/*
 target/
 lib_managed/
+workfiles/
 src_managed/
 project/boot/
 project/plugins/project/
